@@ -1,0 +1,318 @@
+openapi: 3.0.0
+info:
+  title: Posts API
+  version: 1.0.0
+
+tags:
+  - name: Tasks
+  - name: Posts
+  - name: Auth
+
+paths:
+  /tasks:
+    get:
+      tags:
+        - Tasks
+      summary: Get all tasks with optional completion filter
+      parameters:
+        - $ref: "#/components/parameters/CompletedParam"
+      responses:
+        "200":
+          description: List of tasks returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+              examples:
+                allTasks:
+                  summary: All tasks (no filter)
+                  value:
+                    - id: 1
+                      title: Buy groceries
+                      completed: false
+                    - id: 2
+                      title: Walk the dog
+                      completed: true
+                completedTasks:
+                  summary: Completed tasks only
+                  value:
+                    - id: 2
+                      title: Walk the dog
+                      completed: true
+                incompleteTasks:
+                  summary: Incomplete tasks only
+                  value:
+                    - id: 1
+                      title: Buy groceries
+                      completed: false
+        "400":
+          description: Invalid value for completed parameter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: string
+              example:
+                errors:
+                  - "completed must be 'true' or 'false'"
+
+  /posts:
+    get:
+      tags:
+        - Posts
+      summary: Get all posts with filtering, sorting, and pagination
+      parameters:
+        - $ref: "#/components/parameters/SearchParam"
+        - $ref: "#/components/parameters/SortByParam"
+        - $ref: "#/components/parameters/OrderParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: List of posts returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Post"
+
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Create a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+            example:
+              email: user@example.com
+              password: password123
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              example:
+                id: 1
+                email: user@example.com
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /posts/{id}:
+    put:
+      tags:
+        - Posts
+      summary: Update a post
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePost"
+            example:
+              title: Updated Title
+              content: Updated content here
+      responses:
+        "200":
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Post"
+        "400":
+          description: Invalid ID or invalid post data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: string
+              example:
+                errors:
+                  - "ID must be a positive integer"
+                  - "Title cannot be empty"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - Posts
+      summary: Delete a post
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PostId"
+      responses:
+        "204":
+          description: Post deleted successfully (No Content)
+        "400":
+          description: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CompletedParam:
+      name: completed
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [true, false]
+      description: >
+        Filter tasks by completion status.
+        Use `true` for completed tasks, `false` for incomplete tasks.
+        Omit to return all tasks.
+        Any other value returns a 400 Bad Request.
+      example: "true"
+
+    SearchParam:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter posts by matching title or content
+      example: "javascript"
+
+    SortByParam:
+      name: sortBy
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Field to sort by (e.g., createdAt, title)
+      example: "createdAt"
+
+    OrderParam:
+      name: order
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+      description: Sort order
+      example: "desc"
+
+    OffsetParam:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+      description: Number of posts to skip
+      example: 0
+
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+      description: Number of posts per page
+      example: 10
+
+    PostId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Post ID
+
+  schemas:
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: Buy groceries
+        completed:
+          type: boolean
+          example: false
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    UpdatePost:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request input
+
+    Unauthorized:
+      description: User not authenticated
+
+    Forbidden:
+      description: User not authorized
+
+    NotFound:
+      description: Resource not found
