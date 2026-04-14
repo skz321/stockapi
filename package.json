@@ -1,0 +1,13 @@
+{
+  "name": "stockapi-root",
+  "private": true,
+  "workspaces": [
+    "task-api"
+  ],
+  "scripts": {
+    "start": "yarn workspace task-api start",
+    "dev": "yarn workspace task-api dev",
+    "install:api": "yarn --cwd task-api install"
+  }
+}
+
