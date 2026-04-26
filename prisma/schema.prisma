@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum TradeType {
+  CALL
+  PUT
+  STOCK
+}
+
+model User {
+  id         Int        @id @default(autoincrement())
+  email      String     @unique
+  password   String
+  role       Role       @default(USER)
+  createdAt  DateTime   @default(now())
+  trades     Trade[]
+  strategies Strategy[]
+}
+
+model Trade {
+  id         Int        @id @default(autoincrement())
+  userId     Int
+  strategyId Int?
+  symbol     String
+  type       TradeType
+  entryPrice Float
+  exitPrice  Float?
+  quantity   Int
+  entryDate  DateTime
+  exitDate   DateTime?
+  notes      String?
+  createdAt  DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy   Strategy?  @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+}
+
+model Strategy {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trades      Trade[]
+}
+
+model MarketSnapshot {
+  id        Int      @id @default(autoincrement())
+  symbol    String
+  price     Float
+  ema       Float?
+  timestamp DateTime
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,998 @@
+openapi: 3.0.0
+info:
+  title: Options Trading Analytics API
+  version: 1.0.0
+  description: >
+    A RESTful API for managing and analyzing stock and options trading activity.
+    Supports JWT-based authentication, full CRUD for Trades, Strategies, and
+    MarketSnapshots, with ownership-based and role-based authorization.
+
+servers:
+  - url: /api
+    description: Base API path
+
+tags:
+  - name: Auth
+    description: User signup and login
+  - name: Trades
+    description: Individual stock or options trades (owner-only access)
+  - name: Strategies
+    description: Trading strategies that group trades (owner-only access)
+  - name: MarketSnapshots
+    description: Time-series market data (read requires auth; write requires admin)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        email:
+          type: string
+          example: trader@example.com
+
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          example: newuser@example.com
+        password:
+          type: string
+          example: Password123!
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          example: trader@example.com
+        password:
+          type: string
+          example: Trader123!
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+    Trade:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 2
+        strategyId:
+          type: integer
+          nullable: true
+          example: 1
+        symbol:
+          type: string
+          example: SPY
+        type:
+          type: string
+          enum: [CALL, PUT, STOCK]
+          example: CALL
+        entryPrice:
+          type: number
+          example: 2.50
+        exitPrice:
+          type: number
+          nullable: true
+          example: 4.80
+        quantity:
+          type: integer
+          example: 10
+        entryDate:
+          type: string
+          format: date-time
+          example: "2025-01-10T09:30:00.000Z"
+        exitDate:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-01-12T15:00:00.000Z"
+        notes:
+          type: string
+          nullable: true
+          example: Clean bounce off 50 EMA
+        createdAt:
+          type: string
+          format: date-time
+
+    TradeRequest:
+      type: object
+      required:
+        - symbol
+        - type
+        - entryPrice
+        - quantity
+        - entryDate
+      properties:
+        symbol:
+          type: string
+          example: SPY
+        type:
+          type: string
+          enum: [CALL, PUT, STOCK]
+          example: CALL
+        entryPrice:
+          type: number
+          example: 2.50
+        exitPrice:
+          type: number
+          nullable: true
+          example: 4.80
+        quantity:
+          type: integer
+          example: 10
+        entryDate:
+          type: string
+          format: date-time
+          example: "2025-01-10T09:30:00.000Z"
+        exitDate:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2025-01-12T15:00:00.000Z"
+        notes:
+          type: string
+          nullable: true
+          example: Clean bounce off 50 EMA
+        strategyId:
+          type: integer
+          nullable: true
+          example: 1
+
+    Strategy:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: EMA Bounce
+        description:
+          type: string
+          nullable: true
+          example: 50 EMA support entries on high-volume days
+        createdAt:
+          type: string
+          format: date-time
+
+    StrategyRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: EMA Bounce
+        description:
+          type: string
+          nullable: true
+          example: 50 EMA support entries on high-volume days
+
+    MarketSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        symbol:
+          type: string
+          example: SPY
+        price:
+          type: number
+          example: 480.25
+        ema:
+          type: number
+          nullable: true
+          example: 475.10
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-01-10T09:30:00.000Z"
+        createdAt:
+          type: string
+          format: date-time
+
+    MarketSnapshotRequest:
+      type: object
+      required:
+        - symbol
+        - price
+        - timestamp
+      properties:
+        symbol:
+          type: string
+          example: SPY
+        price:
+          type: number
+          example: 480.25
+        ema:
+          type: number
+          nullable: true
+          example: 475.10
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-01-10T09:30:00.000Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Resource not found
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+          example:
+            - symbol is required
+            - entryPrice must be a positive number
+
+  responses:
+    Unauthorized:
+      description: No token provided or token is invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: No token provided
+    Forbidden:
+      description: Authenticated but not authorized (wrong owner or wrong role)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Access denied
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: Trade not found
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+
+paths:
+
+  # ─────────────────────────── AUTH ───────────────────────────
+
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+            example:
+              email: newuser@example.com
+              password: Password123!
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+              example:
+                id: 3
+                email: newuser@example.com
+        "400":
+          description: Missing fields or invalid email format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Invalid email format
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Email already in use
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Log in and receive a JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: trader@example.com
+              password: Trader123!
+      responses:
+        "200":
+          description: Login successful, JWT returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        "400":
+          description: Missing email or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Email and password are required
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Invalid credentials
+
+  # ─────────────────────────── TRADES ───────────────────────────
+
+  /trades:
+    post:
+      tags:
+        - Trades
+      summary: Create a new trade
+      description: Creates a trade owned by the authenticated user.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeRequest"
+            example:
+              symbol: SPY
+              type: CALL
+              entryPrice: 2.50
+              quantity: 10
+              entryDate: "2025-01-10T09:30:00.000Z"
+              notes: Clean bounce off 50 EMA
+      responses:
+        "201":
+          description: Trade created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+              example:
+                id: 1
+                userId: 2
+                strategyId: null
+                symbol: SPY
+                type: CALL
+                entryPrice: 2.50
+                exitPrice: null
+                quantity: 10
+                entryDate: "2025-01-10T09:30:00.000Z"
+                exitDate: null
+                notes: Clean bounce off 50 EMA
+                createdAt: "2025-01-10T09:31:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    get:
+      tags:
+        - Trades
+      summary: Get all trades for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of trades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+              example:
+                - id: 1
+                  userId: 2
+                  strategyId: 1
+                  symbol: SPY
+                  type: CALL
+                  entryPrice: 2.50
+                  exitPrice: 4.80
+                  quantity: 10
+                  entryDate: "2025-01-10T09:30:00.000Z"
+                  exitDate: "2025-01-12T15:00:00.000Z"
+                  notes: Clean bounce off 50 EMA
+                  createdAt: "2025-01-10T09:31:00.000Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /trades/{id}:
+    get:
+      tags:
+        - Trades
+      summary: Get a single trade by ID
+      description: Only the owner of the trade may access it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "200":
+          description: Trade found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+              example:
+                id: 1
+                userId: 2
+                strategyId: 1
+                symbol: SPY
+                type: CALL
+                entryPrice: 2.50
+                exitPrice: 4.80
+                quantity: 10
+                entryDate: "2025-01-10T09:30:00.000Z"
+                exitDate: "2025-01-12T15:00:00.000Z"
+                notes: Clean bounce off 50 EMA
+                createdAt: "2025-01-10T09:31:00.000Z"
+        "400":
+          description: ID must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags:
+        - Trades
+      summary: Update a trade by ID
+      description: Only the owner may update the trade.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeRequest"
+            example:
+              symbol: SPY
+              type: CALL
+              entryPrice: 2.50
+              exitPrice: 5.10
+              quantity: 10
+              entryDate: "2025-01-10T09:30:00.000Z"
+              exitDate: "2025-01-13T15:00:00.000Z"
+              notes: Held one extra day
+      responses:
+        "200":
+          description: Trade updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Trade"
+              example:
+                id: 1
+                userId: 2
+                strategyId: 1
+                symbol: SPY
+                type: CALL
+                entryPrice: 2.50
+                exitPrice: 5.10
+                quantity: 10
+                entryDate: "2025-01-10T09:30:00.000Z"
+                exitDate: "2025-01-13T15:00:00.000Z"
+                notes: Held one extra day
+                createdAt: "2025-01-10T09:31:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - Trades
+      summary: Delete a trade by ID
+      description: Only the owner may delete the trade.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "204":
+          description: Trade deleted (no content)
+        "400":
+          description: ID must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─────────────────────────── STRATEGIES ───────────────────────────
+
+  /strategies:
+    post:
+      tags:
+        - Strategies
+      summary: Create a new strategy
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StrategyRequest"
+            example:
+              name: EMA Bounce
+              description: 50 EMA support entries on high-volume days
+      responses:
+        "201":
+          description: Strategy created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Strategy"
+              example:
+                id: 1
+                userId: 2
+                name: EMA Bounce
+                description: 50 EMA support entries on high-volume days
+                createdAt: "2025-01-01T00:00:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    get:
+      tags:
+        - Strategies
+      summary: Get all strategies for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of strategies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Strategy"
+              example:
+                - id: 1
+                  userId: 2
+                  name: EMA Bounce
+                  description: 50 EMA support entries on high-volume days
+                  createdAt: "2025-01-01T00:00:00.000Z"
+                - id: 2
+                  userId: 2
+                  name: Earnings Play
+                  description: Options plays around earnings announcements
+                  createdAt: "2025-01-02T00:00:00.000Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /strategies/{id}:
+    get:
+      tags:
+        - Strategies
+      summary: Get a single strategy by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "200":
+          description: Strategy found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Strategy"
+              example:
+                id: 1
+                userId: 2
+                name: EMA Bounce
+                description: 50 EMA support entries on high-volume days
+                createdAt: "2025-01-01T00:00:00.000Z"
+        "400":
+          description: ID must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags:
+        - Strategies
+      summary: Update a strategy by ID
+      description: Only the owner may update the strategy.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StrategyRequest"
+            example:
+              name: EMA Bounce v2
+              description: Updated strategy with refined entry rules
+      responses:
+        "200":
+          description: Strategy updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Strategy"
+              example:
+                id: 1
+                userId: 2
+                name: EMA Bounce v2
+                description: Updated strategy with refined entry rules
+                createdAt: "2025-01-01T00:00:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - Strategies
+      summary: Delete a strategy by ID
+      description: Only the owner may delete the strategy.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "204":
+          description: Strategy deleted (no content)
+        "400":
+          description: ID must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ─────────────────────────── MARKET SNAPSHOTS ───────────────────────────
+
+  /marketsnapshots:
+    post:
+      tags:
+        - MarketSnapshots
+      summary: Create a new market snapshot (Admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarketSnapshotRequest"
+            example:
+              symbol: SPY
+              price: 480.25
+              ema: 475.10
+              timestamp: "2025-01-10T09:30:00.000Z"
+      responses:
+        "201":
+          description: Market snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSnapshot"
+              example:
+                id: 1
+                symbol: SPY
+                price: 480.25
+                ema: 475.10
+                timestamp: "2025-01-10T09:30:00.000Z"
+                createdAt: "2025-01-10T09:31:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Admin access required
+
+    get:
+      tags:
+        - MarketSnapshots
+      summary: Get all market snapshots (optionally filter by symbol)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: symbol
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter snapshots by ticker symbol (case-insensitive)
+          example: SPY
+      responses:
+        "200":
+          description: List of market snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarketSnapshot"
+              example:
+                - id: 2
+                  symbol: SPY
+                  price: 483.10
+                  ema: 476.20
+                  timestamp: "2025-01-11T09:30:00.000Z"
+                  createdAt: "2025-01-11T09:31:00.000Z"
+                - id: 1
+                  symbol: SPY
+                  price: 480.25
+                  ema: 475.10
+                  timestamp: "2025-01-10T09:30:00.000Z"
+                  createdAt: "2025-01-10T09:31:00.000Z"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /marketsnapshots/{id}:
+    get:
+      tags:
+        - MarketSnapshots
+      summary: Get a single market snapshot by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "200":
+          description: Market snapshot found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSnapshot"
+              example:
+                id: 1
+                symbol: SPY
+                price: 480.25
+                ema: 475.10
+                timestamp: "2025-01-10T09:30:00.000Z"
+                createdAt: "2025-01-10T09:31:00.000Z"
+        "400":
+          description: ID must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags:
+        - MarketSnapshots
+      summary: Update a market snapshot by ID (Admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarketSnapshotRequest"
+            example:
+              symbol: SPY
+              price: 481.00
+              ema: 475.50
+              timestamp: "2025-01-10T09:30:00.000Z"
+      responses:
+        "200":
+          description: Market snapshot updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketSnapshot"
+              example:
+                id: 1
+                symbol: SPY
+                price: 481.00
+                ema: 475.50
+                timestamp: "2025-01-10T09:30:00.000Z"
+                createdAt: "2025-01-10T09:31:00.000Z"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Admin access required
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags:
+        - MarketSnapshots
+      summary: Delete a market snapshot by ID (Admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "204":
+          description: Market snapshot deleted (no content)
+        "400":
+          description: ID must be a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: ID must be a positive integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Admin access required
+        "404":
+          $ref: "#/components/responses/NotFound"
