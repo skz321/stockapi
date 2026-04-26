@@ -20,6 +20,9 @@ const openapiPath = path.join(__dirname, '..', 'openapi.yaml');
 const swaggerDocument = yaml.load(fs.readFileSync(openapiPath, 'utf8'));
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+// Redirect root to docs
+app.get('/', (req, res) => res.redirect('/api/docs'));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/trades', tradesRoutes);
